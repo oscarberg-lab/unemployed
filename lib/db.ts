@@ -75,7 +75,7 @@ async function create(): Promise<Db> {
     return { query: async (text, params) => (await pool.query(text, params as unknown[])).rows };
   }
   const { PGlite } = await import("@electric-sql/pglite");
-  const dir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pg");
+  const dir = process.env.PGLITE_DIR || path.join(process.cwd(), ".data", "pg");
   if (!dir.startsWith("memory://")) fs.mkdirSync(dir, { recursive: true });
   const lite = new PGlite(dir);
   await lite.exec(SCHEMA);

@@ -86,6 +86,19 @@ describe("Gemini provider", () => {
     expect(b.calls).toHaveLength(4);
   });
 
+  it("falls back to the default model when GEMINI_MODEL is set but empty, as CI does for unset variables", async () => {
+    process.env.GEMINI_MODEL = "";
+    const urls: string[] = [];
+    const llm = createGeminiLlm({
+      apiKey: "k",
+      minIntervalMs: 0,
+      fetch: (async (url: string) => (urls.push(url), ok("Dear team"))) as typeof fetch,
+    });
+    await llm.coverLetter(PROFILE, job(), "");
+    delete process.env.GEMINI_MODEL;
+    expect(urls[0]).toContain("/models/gemini-flash-lite-latest:generateContent");
+  });
+
   it("reports a missing or rejected key as a configuration problem", async () => {
     await expect(setup([], "").llm.scoreJob(ctx, job())).rejects.toThrow(LlmConfigError);
     const bad = setup([fail(400, { message: "API key not valid. Please pass a valid API key." })]);

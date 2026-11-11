@@ -31,8 +31,8 @@ export interface GeminiOptions {
 
 export function createGeminiLlm(options: GeminiOptions = {}): Llm {
   const apiKey = options.apiKey ?? process.env.GEMINI_API_KEY ?? "";
-  const model = options.model ?? process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
-  const minIntervalMs = options.minIntervalMs ?? Number(process.env.GEMINI_MIN_INTERVAL_MS ?? 5000);
+  const model = options.model ?? (process.env.GEMINI_MODEL || "gemini-flash-lite-latest");
+  const minIntervalMs = options.minIntervalMs ?? Number(process.env.GEMINI_MIN_INTERVAL_MS || 5000);
   const doFetch = options.fetch ?? fetch;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
