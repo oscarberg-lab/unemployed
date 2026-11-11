@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { FeedbackExample, JobScore, Preferences, Profile, RawJob } from "./types";
 
 /** Override with LLM_MODEL (e.g. a smaller model to cut the daily scoring cost). */
-const MODEL = process.env.LLM_MODEL ?? "claude-opus-5-5";
+const MODEL = process.env.LLM_MODEL || "claude-opus-5-5";
 // If the model declines a request, the API retries it once on its default fallback model.
 const FALLBACK = { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
 

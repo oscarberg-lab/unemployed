@@ -25,7 +25,7 @@ export async function sendDigest(jobs: JobRow[]): Promise<boolean> {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: process.env.DIGEST_FROM ?? "Job matches <onboarding@resend.dev>",
+      from: process.env.DIGEST_FROM || "Job matches <onboarding@resend.dev>",
       to: [process.env.DIGEST_TO],
       subject: `${jobs.length} new job match${jobs.length === 1 ? "" : "es"} (top score ${jobs[0].score})`,
       html: digestHtml(jobs, process.env.APP_URL),

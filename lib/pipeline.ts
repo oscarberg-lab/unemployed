@@ -33,7 +33,7 @@ export async function runPipeline(deps: PipelineDeps = {}): Promise<store.RunSta
   if (!prefs.searchTerms.length) throw new Error("Add at least one search term in your preferences.");
 
   const sources = deps.sources ?? SOURCES;
-  const maxScored = deps.maxScored ?? Number(process.env.MAX_SCORED_PER_RUN ?? 40);
+  const maxScored = deps.maxScored ?? Number(process.env.MAX_SCORED_PER_RUN || 40);
   const stats: store.RunStats = { fetched: 0, new: 0, filtered: 0, scored: 0, failed: 0, emailed: 0, sourceErrors: [] };
   const runId = await store.startRun();
 
