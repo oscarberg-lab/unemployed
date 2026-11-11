@@ -55,13 +55,14 @@ export async function insertJob(job: RawJob, filteredReason: string | null): Pro
   const db = await getDb();
   await db.query(
     `INSERT INTO jobs (id, source, title, company, url, description, region, location, lat, lon, remote,
-                       eligible_regions, working_hours, contract_type, salary, deadline, published_at, dedupe_key, filtered_reason)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+                       eligible_regions, working_hours, contract_type, salary, deadline, published_at, dedupe_key, filtered_reason,
+                       occupation, occupation_field)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
      ON CONFLICT (id) DO NOTHING`,
     [
       jobId(job), job.source, job.title, job.company, job.url, job.description, job.region, job.location, job.lat, job.lon,
       job.remote, job.eligibleRegions, job.workingHours, job.contractType, job.salary, job.deadline, job.publishedAt,
-      dedupeKey(job), filteredReason,
+      dedupeKey(job), filteredReason, job.occupation, job.occupationField,
     ],
   );
 }
@@ -84,6 +85,8 @@ export function toRawJob(row: StoredJob): RawJob {
     lat: row.lat,
     lon: row.lon,
     remote: row.remote,
+    occupation: row.occupation,
+    occupationField: row.occupation_field,
     eligibleRegions: row.eligible_regions,
     workingHours: row.working_hours as RawJob["workingHours"],
     contractType: row.contract_type as RawJob["contractType"],
@@ -106,9 +109,25 @@ export async function saveScore(id: string, s: JobScore, filteredReason: string 
   const db = await getDb();
   await db.query(
     `UPDATE jobs SET score = $2, subscores = $3::jsonb, summary = $4, strengths = $5::jsonb, gaps = $6::jsonb,
-                     work_mode = $7, filtered_reason = $8, scored_at = now() WHERE id = $1`,
+                     work_mode = $7, filtered_reason = $8, scored_at = now(), score_version = ${SCORE_VERSION} WHERE id = $1`,
     [id, s.score, JSON.stringify(s.subscores), s.summary, JSON.stringify(s.strengths), JSON.stringify(s.gaps), s.workMode, filteredReason],
   );
+}
+
+/**
+ * Bump when grading changes enough that old grades are misleading. Untouched jobs graded under an
+ * older version are sent back to the queue; anything the user saved, applied to or rated is left alone.
+ */
+export const SCORE_VERSION = 2;
+
+export async function requeueOutdatedScores(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.query(
+    `UPDATE jobs SET score = NULL, score_attempts = 0
+     WHERE score IS NOT NULL AND score_version < ${SCORE_VERSION} AND status = 'new' AND feedback IS NULL AND filtered_reason IS NULL
+     RETURNING id`,
+  );
+  return rows.length;
 }
 
 export async function noteScoreFailure(id: string): Promise<void> {

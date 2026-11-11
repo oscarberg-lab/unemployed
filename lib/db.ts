@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   cover_letter TEXT,
   notified BOOLEAN NOT NULL DEFAULT false
 );
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS occupation TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS occupation_field TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_version INT NOT NULL DEFAULT 1;
 CREATE INDEX IF NOT EXISTS jobs_dedupe_key ON jobs (dedupe_key);
 CREATE INDEX IF NOT EXISTS jobs_score ON jobs (score DESC);
 CREATE TABLE IF NOT EXISTS runs (

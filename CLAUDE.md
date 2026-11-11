@@ -17,6 +17,7 @@ Personal, single-user job-search tool for the Swedish market. See README.md for 
 
 - Raw SQL with `$n` parameters through `Db.query`; it must work on both `pg` and PGlite. Schema lives in `lib/db.ts` as idempotent `CREATE ... IF NOT EXISTS`.
 - No scraping of sites that forbid it (Indeed, LinkedIn). Use public APIs/feeds and keep attribution ("via <source>") visible.
+- Bump `SCORE_VERSION` in `lib/store.ts` when grading rules change enough that old grades mislead; untouched jobs are then re-graded.
 - Seniority comes from the CV. Do not add a seniority setting.
 - Run `npm test`, `npm run typecheck` and `npm run lint` before committing. Pipeline behaviour changes need a test in `tests/pipeline.test.ts`.
 - In this cloud environment Node's `fetch` needs `NODE_USE_ENV_PROXY=1` to reach external hosts.

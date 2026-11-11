@@ -1,6 +1,7 @@
 import { addPlace, removePlace, savePreferences, uploadCv } from "@/app/actions";
 import { Flash, one, type Search } from "@/components/Flash";
 import { SubmitButton } from "@/components/SubmitButton";
+import { effectiveFields, OCCUPATION_FIELDS } from "@/lib/fields";
 import { providerLabel } from "@/lib/llm-provider";
 import { getSettings } from "@/lib/store";
 
@@ -18,6 +19,7 @@ function Check({ name, value, label, checked }: { name: string; value?: string; 
 export default async function ProfilePage({ searchParams }: { searchParams: Search }) {
   const params = await searchParams;
   const { profile, cvFilename, prefs } = await getSettings();
+  const fields = effectiveFields(profile, prefs);
   return (
     <>
       <h1>CV &amp; preferences</h1>
@@ -100,10 +102,23 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
           <span className="meta">Most Swedish postings do not state a salary, so this lowers the score when one is stated rather than hiding jobs.</span>
         </label>
 
+        <fieldset id="fields">
+          <legend>Fields of work</legend>
+          <p className="meta">
+            Swedish jobs outside the ticked fields are never shown. {prefs.occupationFields === null && fields.length > 0 ? "These were suggested from your CV." : ""}
+            {fields.length === 0 ? " Nothing is ticked, so all fields are searched: tick yours to cut out irrelevant jobs." : ""}
+          </p>
+          <div className="checks">
+            {OCCUPATION_FIELDS.map((f) => (
+              <Check key={f.id} name="occupationFields" value={f.id} label={`${f.english} (${f.label})`} checked={fields.includes(f.id)} />
+            ))}
+          </div>
+        </fieldset>
+
         <label>
           Job titles to search for (one per line)
           <textarea name="searchTerms" rows={6} defaultValue={prefs.searchTerms.join("\n")} />
-          <span className="meta">Suggested from your CV. Edit freely, in Swedish and English.</span>
+          <span className="meta">Suggested from your CV. Edit freely, in Swedish and English. Specific titles work best; a generic word like “analytiker” matches many professions.</span>
         </label>
 
         <label>

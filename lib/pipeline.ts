@@ -1,4 +1,5 @@
 import { sendDigest } from "./email";
+import { effectiveFields } from "./fields";
 import { dedupe, hardFilter } from "./filters";
 import { isConfigError, LlmQuotaError, type Llm } from "./llm";
 import { getLlm } from "./llm-provider";
@@ -41,10 +42,13 @@ export async function runPipeline(deps: PipelineDeps = {}): Promise<store.RunSta
     // The first run looks further back so the list is not empty on day one.
     const maxAgeDays = (await store.hasSuccessfulRun()) ? 3 : 14;
 
+    const fields = effectiveFields(profile, prefs);
+    await store.requeueOutdatedScores();
+
     const fetched: RawJob[] = [];
     for (const source of sources.filter((s) => s.enabled(prefs))) {
       try {
-        fetched.push(...(await source.fetch({ prefs, maxAgeDays })));
+        fetched.push(...(await source.fetch({ prefs, fields, maxAgeDays })));
       } catch (err) {
         // One site being down must not stop the others.
         stats.sourceErrors.push(`${source.name}: ${err instanceof Error ? err.message : String(err)}`);
@@ -58,7 +62,7 @@ export async function runPipeline(deps: PipelineDeps = {}): Promise<store.RunSta
     stats.new = fresh.length;
 
     for (const job of fresh) {
-      const reason = hardFilter(job, prefs);
+      const reason = hardFilter(job, prefs, fields);
       if (reason) stats.filtered++;
       await store.insertJob(job, reason);
     }
@@ -78,7 +82,13 @@ export async function runPipeline(deps: PipelineDeps = {}): Promise<store.RunSta
         }
         try {
           const score = await llm.scoreJob(ctx, store.toRawJob(row));
-          const reason = row.region === "INTL" && !score.strictlyRemoteFromSweden ? "not strictly remote from Sweden" : null;
+          const reason = !score.relevantProfession
+            ? "different profession"
+            : !score.meetsFormalRequirements
+              ? "requires a licence or qualification you do not have"
+              : row.region === "INTL" && !score.strictlyRemoteFromSweden
+                ? "not strictly remote from Sweden"
+                : null;
           await store.saveScore(row.id, score, reason);
           stats.scored++;
           if (reason) stats.filtered++;

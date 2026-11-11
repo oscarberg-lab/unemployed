@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { validFieldIds } from "@/lib/fields";
 import { geocodeSweden } from "@/lib/geo";
 import { getLlm } from "@/lib/llm-provider";
 import { runPipeline } from "@/lib/pipeline";
@@ -58,6 +59,7 @@ export async function savePreferences(form: FormData) {
     avoidCompanies: list(form.get("avoidCompanies")),
     avoidIndustries: list(form.get("avoidIndustries")),
     searchTerms: list(form.get("searchTerms")),
+    occupationFields: validFieldIds(form.getAll("occupationFields").map(String)),
     notes: String(form.get("notes") ?? "").trim(),
     digestMinScore: Number.isFinite(digest) ? Math.max(0, Math.min(100, Math.round(digest))) : prefs.digestMinScore,
   };

@@ -18,6 +18,8 @@ describe("source mapping", () => {
         application_deadline: "2026-12-18T23:59:59",
         publication_date: "2026-11-11T11:43:54",
         workplace_address: { municipality: "Stockholm", region: "Stockholms län", coordinates: [18.0599, 59.3302] },
+        occupation: { label: "Fullstack-utvecklare" },
+        occupation_field: { concept_id: "apaJ_2ja_LuF" },
       },
       false,
     );
@@ -31,6 +33,8 @@ describe("source mapping", () => {
       lon: 18.0599,
       workingHours: "full_time",
       contractType: "permanent",
+      occupation: "Fullstack-utvecklare",
+      occupationField: "apaJ_2ja_LuF",
     });
   });
 

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { FIELD_LABELS, fieldIdsFromLabels } from "./fields";
 import type { FeedbackExample, JobScore, Preferences, Profile, RawJob } from "./types";
 
 /** Override with LLM_MODEL (e.g. a smaller model to cut the daily scoring cost). */
@@ -41,7 +42,10 @@ export const ProfileSchema = z.object({
   experience: z.array(z.object({ title: z.string(), company: z.string(), period: z.string(), summary: z.string() })),
   searchTerms: z
     .array(z.string())
-    .describe("5-8 job titles to search Swedish job boards for, mixing Swedish and English, e.g. 'systemutvecklare', 'backend developer'"),
+    .describe("5-8 job titles to search Swedish job boards for, mixing Swedish and English. Use titles specific to this person's profession (e.g. 'redovisningsekonom', 'financial analyst'), never generic words that exist in every profession (e.g. 'analytiker', 'assistent', 'projektledare', 'specialist')"),
+  occupationFields: z
+    .array(z.enum(FIELD_LABELS))
+    .describe("The 1-3 occupation fields of the Swedish Public Employment Service this person is qualified to work in, judged from their education and experience"),
   summary: z.string().describe("3-5 sentences covering strengths, domain experience and what roles fit"),
 });
 
@@ -62,7 +66,18 @@ export const ScoreSchema = z.object({
   strictlyRemoteFromSweden: z
     .boolean()
     .describe("True only if the role is fully remote with no on-location requirement AND can be done by someone living in Sweden"),
+  relevantProfession: z
+    .boolean()
+    .describe("True if the job is in the candidate's profession or a realistic adjacent move given their education and experience. False for a different profession, e.g. a teaching, nursing or driving job for an economist"),
+  meetsFormalRequirements: z
+    .boolean()
+    .describe("False if the posting requires a professional licence (legitimation), certification, or a specific degree that the candidate's CV does not show. True when there is no such requirement or the candidate has it"),
 });
+
+/** Convert the model's field names to ids and keep the rest of the profile as is. */
+export function finishProfile(out: z.infer<typeof ProfileSchema>): Profile {
+  return { ...out, occupationFields: fieldIdsFromLabels(out.occupationFields) };
+}
 
 const SCORING_RULES = `You grade job postings for one job seeker. For each posting, judge how well it fits them and return the structured result.
 
@@ -79,6 +94,8 @@ Sub-scores:
 - preferences: salary (only when the posting states one), contract type, industries to avoid, and the candidate's free-text notes.
 
 Rules:
+- First decide whether this is the candidate's profession at all. A job in a different profession (for example teaching, healthcare or a trade, for someone educated and experienced in economics) is not a stretch, it is irrelevant: set relevantProfession to false and score it below 20.
+- If the posting requires a professional licence (legitimation), certification or specific degree the CV does not show, set meetsFormalRequirements to false and score it below 30.
 - Requirements the posting marks as mandatory that the candidate lacks (a language, a licence, a degree, a citizenship or security clearance) should pull the overall score down hard.
 - A posting in an industry the candidate wants to avoid scores below 40 overall.
 - Be calibrated, not generous: most postings are not a 70+.
@@ -110,7 +127,7 @@ Jobs they marked as not interesting:\n${disliked.map(line).join("\n") || "- none
 export function jobBlock(job: RawJob): string {
   return `Title: ${job.title}
 Employer: ${job.company}
-Location: ${job.location}${job.eligibleRegions ? `\nOpen to candidates in: ${job.eligibleRegions}` : ""}
+${job.occupation ? `Occupation (job board's classification): ${job.occupation}\n` : ""}Location: ${job.location}${job.eligibleRegions ? `\nOpen to candidates in: ${job.eligibleRegions}` : ""}
 Listed as remote by the job board: ${job.remote ? "yes" : "no"}
 Working hours: ${job.workingHours ?? "not stated"}
 Contract: ${job.contractType ?? "not stated"}
@@ -197,7 +214,7 @@ export function createAnthropicLlm(client: Anthropic = new Anthropic()): Llm {
         ],
       });
       if (!res.parsed_output) throw new Error(`Could not read the CV (stop reason: ${res.stop_reason})`);
-      return res.parsed_output;
+      return finishProfile(res.parsed_output);
     },
 
     async scoreJob(ctx, job) {

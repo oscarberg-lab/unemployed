@@ -3,6 +3,7 @@ import { runNow } from "@/app/actions";
 import { Flash, one, type Search } from "@/components/Flash";
 import { JobCard } from "@/components/JobCard";
 import { SubmitButton } from "@/components/SubmitButton";
+import { effectiveFields } from "@/lib/fields";
 import { getSettings, lastRun, listJobs, pendingCount, type JobView } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,9 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
       <Flash ok={one(params.ok)} error={one(params.error)} />
       {prefs.places.length === 0 && (
         <p className="flash">No places chosen, so jobs from all of Sweden are included. <Link href="/profile#places">Choose places</Link></p>
+      )}
+      {effectiveFields(profile, prefs).length === 0 && (
+        <p className="flash">No fields of work chosen, so jobs from every profession are searched. <Link href="/profile#fields">Choose your fields</Link></p>
       )}
       <div className="tabs">
         {VIEWS.map((v) => (

@@ -12,6 +12,8 @@ export interface Profile {
   education: string[];
   experience: { title: string; company: string; period: string; summary: string }[];
   searchTerms: string[];
+  /** Occupation field ids (see lib/fields.ts) the CV points to. Missing on profiles read before this existed. */
+  occupationFields?: string[];
   summary: string;
 }
 
@@ -32,6 +34,8 @@ export interface Preferences {
   avoidCompanies: string[];
   avoidIndustries: string[];
   searchTerms: string[];
+  /** Occupation field ids to restrict the search to. null = not chosen yet, use the CV's. [] = no restriction. */
+  occupationFields: string[] | null;
   notes: string;
   digestMinScore: number;
 }
@@ -46,6 +50,7 @@ export const DEFAULT_PREFS: Preferences = {
   avoidCompanies: [],
   avoidIndustries: [],
   searchTerms: [],
+  occupationFields: null,
   notes: "",
   digestMinScore: 70,
 };
@@ -65,6 +70,10 @@ export interface RawJob {
   lon: number | null;
   /** The source itself flags the job as remote. */
   remote: boolean;
+  /** The job board's own classification, when it has one. */
+  occupation: string | null;
+  /** Occupation field id (see lib/fields.ts), when the job board classifies the posting. */
+  occupationField: string | null;
   /** Free text from international feeds, e.g. "Europe, USA". */
   eligibleRegions: string | null;
   workingHours: "full_time" | "part_time" | null;
@@ -90,6 +99,10 @@ export interface JobScore {
   workMode: WorkMode | "unknown";
   /** For international postings: fully remote AND open to someone living in Sweden. */
   strictlyRemoteFromSweden: boolean;
+  /** The job is in the candidate's profession or a realistic adjacent move. */
+  relevantProfession: boolean;
+  /** False when the posting demands a licence, certification or degree the candidate does not have. */
+  meetsFormalRequirements: boolean;
 }
 
 export const STATUSES = ["new", "saved", "applied", "interview", "offer", "rejected", "dismissed"] as const;
@@ -105,6 +118,8 @@ export interface JobRow {
   region: "SE" | "INTL";
   location: string;
   remote: boolean;
+  occupation: string | null;
+  occupation_field: string | null;
   eligible_regions: string | null;
   working_hours: string | null;
   contract_type: string | null;

@@ -11,6 +11,8 @@ const SCORE = {
   gaps: ["Kubernetes", "Kubernetes ", "AWS"],
   workMode: "hybrid",
   strictlyRemoteFromSweden: false,
+  relevantProfession: true,
+  meetsFormalRequirements: true,
 };
 const ok = (text: string, extraParts: object[] = []) =>
   new Response(JSON.stringify({ candidates: [{ content: { parts: [...extraParts, { text }] }, finishReason: "STOP" }] }), { status: 200 });
@@ -56,10 +58,12 @@ describe("Gemini provider", () => {
   });
 
   it("sends a PDF CV inline and parses the profile", async () => {
-    const { llm, calls } = setup([ok(JSON.stringify(PROFILE))]);
+    const raw = { ...PROFILE, occupationFields: ["Data/IT", "Administration, ekonomi, juridik"] };
+    const { llm, calls } = setup([ok(JSON.stringify(raw))]);
     const profile = await llm.parseCv({ filename: "cv.pdf", mediaType: "application/pdf", data: Buffer.from("%PDF-fake") });
     expect(calls[0].body.contents[0].parts[0].inlineData).toEqual({ mimeType: "application/pdf", data: Buffer.from("%PDF-fake").toString("base64") });
     expect(profile.seniority).toBe("mid");
+    expect(profile.occupationFields).toEqual(["apaJ_2ja_LuF", "X82t_awd_Qyc"]); // labels become ids
   });
 
   it("rejects output that does not match the schema", async () => {
