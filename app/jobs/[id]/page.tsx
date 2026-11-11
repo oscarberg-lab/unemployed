@@ -1,7 +1,11 @@
+import { ArrowLeft, ArrowUpRight, ChevronDown, EyeOff } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { changeStatus, giveFeedback, saveNotes, writeCoverLetter } from "@/app/actions";
 import { Flash, one, type Search } from "@/components/Flash";
-import { JobMeta, scoreClass } from "@/components/JobCard";
+import { jobFacts, jobProvenance, statusLabel } from "@/components/JobCard";
+import { Reasons } from "@/components/Reasons";
+import { ScoreRing, scoreTone } from "@/components/ScoreRing";
 import { SubmitButton } from "@/components/SubmitButton";
 import { getJob } from "@/lib/store";
 import { STATUSES } from "@/lib/types";
@@ -11,9 +15,9 @@ export const maxDuration = 300;
 
 const SUBSCORES = [
   ["skills", "Skills"],
-  ["seniority", "Seniority"],
+  ["seniority", "Level"],
   ["location", "Location"],
-  ["preferences", "Preferences"],
+  ["preferences", "Your preferences"],
 ] as const;
 
 export default async function JobPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Search }) {
@@ -24,94 +28,101 @@ export default async function JobPage({ params, searchParams }: { params: Promis
 
   return (
     <>
-      <div className="head">
-        <div className="row">
-          <div className={scoreClass(job.score)}>{job.score ?? "–"}</div>
+      <Link href="/" className="back-link"><ArrowLeft size={16} aria-hidden="true" /> All matches</Link>
+      <div className="detail-head">
+        <div>
+          <h1>{job.title}</h1>
+          <p className="lede">{jobFacts(job)}</p>
+          <p className="small muted">{jobProvenance(job)}</p>
           <div>
-            <h1>{job.title}</h1>
-            <JobMeta job={job} />
+            <a className="btn btn-primary" href={job.url} target="_blank" rel="noreferrer">Open the posting <ArrowUpRight size={16} aria-hidden="true" /></a>
           </div>
         </div>
-        <a className="btn btn-primary" href={job.url} target="_blank" rel="noreferrer">Open posting</a>
+        <ScoreRing score={job.score} size={128} />
       </div>
       <Flash ok={one(query.ok)} error={one(query.error)} />
 
-      {job.filtered_reason && <p className="flash">Hidden from your matches: {job.filtered_reason}.</p>}
+      {job.filtered_reason && (
+        <p className="notice">
+          <EyeOff size={18} aria-hidden="true" />
+          <span>This job is kept out of your matches: {job.filtered_reason}.</span>
+        </p>
+      )}
 
       {job.subscores && (
-        <section className="card">
-          <h2>Why this score</h2>
-          <p>{job.summary}</p>
-          <div className="subscores">
+        <section className="card stack-lg">
+          <div className="stack">
+            <h2>Why this score</h2>
+            <p>{job.summary}</p>
+          </div>
+          <Reasons strengths={job.strengths} gaps={job.gaps} />
+          <div className="bars">
             {SUBSCORES.map(([key, label]) => (
-              <div key={key}>
-                <div className="gap-head"><span>{label}</span><span className="meta">{job.subscores![key]}</span></div>
+              <div key={key} className={`tone-${scoreTone(job.subscores![key]).tone}`}>
+                <div className="bar-head"><strong>{label}</strong><span>{job.subscores![key]}%</span></div>
                 <div className="bar"><div style={{ width: `${job.subscores![key]}%` }} /></div>
               </div>
             ))}
           </div>
-          {job.strengths && job.strengths.length > 0 && (
-            <>
-              <h3>What fits</h3>
-              <ul>{job.strengths.map((s) => <li key={s}>{s}</li>)}</ul>
-            </>
-          )}
-          {job.gaps && job.gaps.length > 0 && (
-            <p className="chips"><span className="chips-label">Gaps:</span>{job.gaps.map((g) => <span className="chip" key={g}>{g}</span>)}</p>
-          )}
         </section>
       )}
 
-      <section className="card">
-        <h2>Track</h2>
-        <div className="row">
-          <form action={changeStatus} className="row">
-            <input type="hidden" name="id" value={job.id} />
-            <select name="status" defaultValue={job.status} aria-label="Status">
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+      <section className="card stack-lg">
+        <h2>Keep track</h2>
+        <form action={changeStatus} className="row" style={{ alignItems: "flex-end" }}>
+          <input type="hidden" name="id" value={job.id} />
+          <div className="field">
+            <label htmlFor="status">Where this stands</label>
+            <select id="status" name="status" defaultValue={job.status}>
+              {STATUSES.map((s) => <option key={s} value={s}>{s === "new" ? "New" : statusLabel(s)}</option>)}
             </select>
-            <button className="btn btn-small">Set status</button>
-          </form>
-        </div>
+          </div>
+          <button className="btn">Update</button>
+        </form>
+
         <form action={giveFeedback} className="stack">
           <input type="hidden" name="id" value={job.id} />
-          <label>
-            Feedback for the grading (optional reason)
-            <input type="text" name="note" defaultValue={job.feedback_note ?? ""} placeholder="e.g. too much travel, or exactly the kind of team I want" />
-          </label>
+          <div className="field" style={{ width: "100%" }}>
+            <label htmlFor="note">Is this the kind of job you want?</label>
+            <input id="note" type="text" name="note" defaultValue={job.feedback_note ?? ""} placeholder="Optional: say why, e.g. too much travel, or exactly the kind of team I want" />
+            <p className="hint">Your answer shapes how future jobs are scored.</p>
+          </div>
           <div className="row">
-            <button className={job.feedback === "up" ? "btn btn-small btn-on" : "btn btn-small"} name="feedback" value="up">Interested</button>
-            <button className={job.feedback === "down" ? "btn btn-small btn-on" : "btn btn-small"} name="feedback" value="down">Not for me</button>
+            <button className="btn btn-small" name="feedback" value="up" aria-pressed={job.feedback === "up"}>Interested</button>
+            <button className="btn btn-small" name="feedback" value="down" aria-pressed={job.feedback === "down"}>Not for me</button>
           </div>
         </form>
+
         <form action={saveNotes} className="stack">
           <input type="hidden" name="id" value={job.id} />
-          <label>
-            Your notes
-            <textarea name="notes" rows={3} defaultValue={job.notes ?? ""} placeholder="Contact person, interview dates, follow-ups…" />
-          </label>
+          <div className="field" style={{ width: "100%" }}>
+            <label htmlFor="notes">Your notes</label>
+            <textarea id="notes" name="notes" rows={3} defaultValue={job.notes ?? ""} placeholder="Contact person, interview dates, things to follow up…" />
+          </div>
           <SubmitButton className="btn btn-small" pendingText="Saving…">Save notes</SubmitButton>
         </form>
       </section>
 
-      <section className="card" id="letter">
-        <h2>Cover letter</h2>
+      <section className="card stack-lg" id="letter">
+        <div className="stack">
+          <h2>Cover letter</h2>
+          <p className="muted">A first draft written from your CV for this particular job. Treat it as a starting point and make it yours before sending.</p>
+        </div>
         <form action={writeCoverLetter} className="stack">
           <input type="hidden" name="id" value={job.id} />
-          <label>
-            Anything to emphasise (optional)
-            <input type="text" name="extra" placeholder="e.g. my thesis project, that I can start in January" />
-          </label>
-          <SubmitButton pendingText="Writing…">{job.cover_letter ? "Rewrite letter" : "Write a tailored letter"}</SubmitButton>
+          <div className="field" style={{ width: "100%" }}>
+            <label htmlFor="extra">Anything you want it to bring out?</label>
+            <input id="extra" type="text" name="extra" placeholder="Optional, e.g. my thesis project, or that I can start in January" />
+          </div>
+          <SubmitButton pendingText="Writing your draft…">{job.cover_letter ? "Write a new draft" : "Draft a letter"}</SubmitButton>
         </form>
         {job.cover_letter && <pre className="letter">{job.cover_letter}</pre>}
-        <p className="meta">A draft based only on your CV. Read and edit it before sending.</p>
       </section>
 
-      <section className="card">
-        <h2>Posting</h2>
-        <div className="description">{job.description}</div>
-      </section>
+      <details className="card posting">
+        <summary>Read the full posting <ChevronDown size={22} aria-hidden="true" /></summary>
+        <div className="posting-text">{job.description}</div>
+      </details>
     </>
   );
 }
