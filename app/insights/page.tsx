@@ -1,3 +1,4 @@
+import { Sprout } from "lucide-react";
 import { gapCounts } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -7,20 +8,32 @@ export default async function InsightsPage() {
   const max = gaps[0]?.count ?? 1;
   return (
     <>
-      <h1>Skill gaps</h1>
-      <p className="meta">Requirements you are missing in jobs that otherwise fit (score 50 or higher), most frequent first. These are the things most worth learning or making clearer in your CV.</p>
+      <div className="page-head">
+        <div>
+          <h1>What would open more doors</h1>
+          <p className="lede">
+            The requirements you most often lack in jobs that otherwise fit you. A few of these are probably worth learning, and some you
+            may already have and simply need to make clearer in your CV.
+          </p>
+        </div>
+      </div>
+
       {gaps.length === 0 ? (
-        <p className="card empty">No data yet. Gaps appear after the first search has scored some jobs.</p>
+        <div className="empty">
+          <Sprout size={28} strokeWidth={1.5} aria-hidden="true" />
+          <h2>Nothing to show yet</h2>
+          <p className="muted">Once a search has graded some jobs, the gaps that come up most often are gathered here.</p>
+        </div>
       ) : (
         <section className="card">
           {gaps.map((g) => (
-            <div key={g.gap} className="gap">
-              <div className="gap-head">
+            <div key={g.gap} className="gap-row">
+              <div className="bar-head">
                 <strong>{g.gap}</strong>
-                <span className="meta">{g.count} job{g.count === 1 ? "" : "s"}</span>
+                <span>{g.count} {g.count === 1 ? "job" : "jobs"}</span>
               </div>
               <div className="bar"><div style={{ width: `${(g.count / max) * 100}%` }} /></div>
-              <p className="meta">e.g. {g.examples.join(" · ")}</p>
+              <p className="small muted">Asked for in: {g.examples.join(" · ")}</p>
             </div>
           ))}
         </section>

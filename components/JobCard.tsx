@@ -1,64 +1,73 @@
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { changeStatus, giveFeedback } from "@/app/actions";
 import { sourceLabel } from "@/lib/sources";
 import type { JobRow } from "@/lib/types";
-
-export const scoreClass = (score: number | null) =>
-  score == null ? "score" : score >= 85 ? "score score-top" : score >= 70 ? "score score-good" : score >= 50 ? "score score-mid" : "score score-low";
+import { Reasons } from "./Reasons";
+import { ScoreRing } from "./ScoreRing";
 
 export const jobHref = (id: string) => `/jobs/${encodeURIComponent(id)}`;
 
-const day = (d: Date | null) => (d ? new Date(d).toLocaleDateString("sv-SE") : null);
+const day = (d: Date | null) =>
+  d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Stockholm" }) : null;
 
-export function JobMeta({ job }: { job: JobRow }) {
-  const parts = [
-    job.company,
-    job.location,
-    job.work_mode && job.work_mode !== "unknown" ? job.work_mode : null,
-    job.salary,
-    job.published_at ? `posted ${day(job.published_at)}` : null,
-    job.deadline ? `apply by ${day(job.deadline)}` : null,
+const WORK_MODE: Record<string, string> = { onsite: "On site", hybrid: "Hybrid", remote: "Remote" };
+const STATUS: Record<string, string> = { saved: "Saved", applied: "Applied", interview: "Interview", offer: "Offer", rejected: "Closed", dismissed: "Hidden" };
+export const statusLabel = (status: string) => STATUS[status] ?? status;
+
+/** Company, place and way of working: the facts people scan for first. */
+export function jobFacts(job: JobRow): string {
+  return [job.company, job.location, job.work_mode ? WORK_MODE[job.work_mode] : null, job.salary].filter(Boolean).join(" · ");
+}
+
+/** Dates and where the posting came from. Sources ask to be credited, so this is always shown. */
+export function jobProvenance(job: JobRow): string {
+  return [
+    job.published_at ? `Posted ${day(job.published_at)}` : null,
+    job.deadline ? `Apply by ${day(job.deadline)}` : null,
     `via ${sourceLabel(job.source)}`,
-  ].filter(Boolean);
-  return <p className="meta">{parts.join(" · ")}</p>;
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function JobCard({ job }: { job: JobRow }) {
   return (
-    <article className="card job">
-      <div className={scoreClass(job.score)} title="Overall fit, 0-100">{job.score ?? "–"}</div>
-      <div className="job-body">
-        <h3>
+    <article className="job-card">
+      <div className="job-main">
+        <h2 className="job-title">
           <Link href={jobHref(job.id)}>{job.title}</Link>
-          {job.status !== "new" && <span className="tag">{job.status}</span>}
-        </h3>
-        <JobMeta job={job} />
+          {job.status !== "new" && <span className="status-tag">{statusLabel(job.status)}</span>}
+        </h2>
+        <p className="job-meta">{jobFacts(job)}</p>
         {job.summary && <p>{job.summary}</p>}
-        {job.gaps && job.gaps.length > 0 && (
-          <p className="chips">
-            <span className="chips-label">Gaps:</span>
-            {job.gaps.map((g) => <span className="chip" key={g}>{g}</span>)}
-          </p>
-        )}
-        <div className="row">
-          <form action={giveFeedback} className="row">
-            <input type="hidden" name="id" value={job.id} />
-            <button className={job.feedback === "up" ? "btn btn-small btn-on" : "btn btn-small"} name="feedback" value="up" title="Interested: saves the job and teaches the scoring">
-              Interested
-            </button>
-            <button className={job.feedback === "down" ? "btn btn-small btn-on" : "btn btn-small"} name="feedback" value="down" title="Not interested: hides the job and teaches the scoring">
-              Not for me
-            </button>
-          </form>
-          {job.status !== "applied" && (
-            <form action={changeStatus}>
+        <Reasons strengths={job.strengths} gaps={job.gaps} />
+        <div className="job-foot">
+          <div className="job-actions">
+            <form action={giveFeedback} className="job-actions">
               <input type="hidden" name="id" value={job.id} />
-              <button className="btn btn-small" name="status" value="applied">Mark applied</button>
+              <button className="btn btn-small" name="feedback" value="up" aria-pressed={job.feedback === "up"} title="Saves the job and teaches the grading what you like">
+                Interested
+              </button>
+              <button className="btn btn-small btn-quiet" name="feedback" value="down" aria-pressed={job.feedback === "down"} title="Hides the job and teaches the grading what to avoid">
+                Not for me
+              </button>
             </form>
-          )}
-          <a className="btn btn-small" href={job.url} target="_blank" rel="noreferrer">Open posting</a>
+            {job.status !== "applied" && (
+              <form action={changeStatus}>
+                <input type="hidden" name="id" value={job.id} />
+                <button className="btn btn-small btn-quiet" name="status" value="applied">I applied</button>
+              </form>
+            )}
+            <Link className="btn btn-small btn-quiet" href={jobHref(job.id)}>Details</Link>
+            <a className="btn btn-small btn-quiet" href={job.url} target="_blank" rel="noreferrer">
+              Open posting <ArrowUpRight size={14} aria-hidden="true" />
+            </a>
+          </div>
+          <span className="small muted">{jobProvenance(job)}</span>
         </div>
       </div>
+      <ScoreRing score={job.score} />
     </article>
   );
 }

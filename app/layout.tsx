@@ -1,23 +1,20 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import "@fontsource-variable/fraunces";
+import "@fontsource-variable/inter";
+import { Nav } from "@/components/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Job matches",
-  description: "Daily job search, graded against your CV",
+  description: "A calm daily look at the jobs that fit you, and why.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <header className="top">
-          <nav>
-            <Link href="/" className="brand">Job matches</Link>
-            <Link href="/tracker">Tracker</Link>
-            <Link href="/insights">Skill gaps</Link>
-            <Link href="/profile">CV &amp; preferences</Link>
-          </nav>
+        <header className="site-header">
+          <Nav />
         </header>
         <main>{children}</main>
       </body>

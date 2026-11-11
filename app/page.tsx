@@ -1,7 +1,9 @@
+import { Compass, Inbox } from "lucide-react";
 import Link from "next/link";
 import { runNow } from "@/app/actions";
 import { Flash, one, type Search } from "@/components/Flash";
 import { JobCard } from "@/components/JobCard";
+import { JobListSkeleton } from "@/components/Skeleton";
 import { SubmitButton } from "@/components/SubmitButton";
 import { effectiveFields } from "@/lib/fields";
 import { getSettings, lastRun, listJobs, pendingCount, type JobView } from "@/lib/store";
@@ -11,8 +13,13 @@ export const maxDuration = 300;
 
 const VIEWS: { key: JobView; label: string }[] = [
   { key: "matches", label: "New" },
-  { key: "all", label: "All" },
+  { key: "all", label: "Everything" },
   { key: "dismissed", label: "Hidden" },
+];
+const SCORES = [
+  { min: 75, label: "Great fits" },
+  { min: 50, label: "Worth a look and up" },
+  { min: 0, label: "All scores" },
 ];
 
 export default async function Home({ searchParams }: { searchParams: Search }) {
@@ -23,52 +30,88 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
 
   if (!profile) {
     return (
-      <section className="card empty">
-        <h1>Start with your CV</h1>
-        <p>Upload your CV and choose where you want to work. The tool then searches once a day and grades each job against your profile.</p>
-        <Link className="btn btn-primary" href="/profile">Upload CV</Link>
+      <section className="welcome">
+        <p className="eyebrow">Welcome</p>
+        <h1>Let’s see what fits you</h1>
+        <p className="lede">
+          Share your CV and tell us where you would like to work. Each morning we look through new job postings, set aside the ones that
+          are not for you, and show you the rest with an honest score and the reasons behind it.
+        </p>
+        <Link className="btn btn-primary" href="/profile">Start with your CV</Link>
+        <p className="small muted">It takes about three minutes. Your CV is only used to find and grade jobs for you.</p>
       </section>
     );
   }
 
   const [jobs, run, pending] = await Promise.all([listJobs(view, minScore), lastRun(), pendingCount()]);
+  const lastSearch = run?.finished_at
+    ? new Date(run.finished_at).toLocaleString("en-GB", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" })
+    : null;
+
   return (
     <>
-      <div className="head">
+      <div className="page-head">
         <div>
-          <h1>Job matches</h1>
-          <p className="meta">
-            {run?.finished_at
-              ? `Last search ${new Date(run.finished_at).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" })}${run.error ? " failed" : ""}`
-              : "No search has run yet."}
-            {pending > 0 && ` · ${pending} postings are waiting to be scored on the next run.`}
+          <h1>Your matches</h1>
+          <p className="muted">
+            {lastSearch ? `Last looked on ${lastSearch}${run?.error ? ", but that search did not finish" : ""}.` : "We have not searched yet."}
+            {pending > 0 && ` ${pending} more ${pending === 1 ? "posting is" : "postings are"} waiting to be graded.`}
           </p>
         </div>
         <form action={runNow}>
-          <SubmitButton className="btn btn-primary" pendingText="Searching and scoring… this can take a few minutes">Search now</SubmitButton>
+          <SubmitButton search className="btn btn-primary" pendingText="Looking for jobs…">Search now</SubmitButton>
         </form>
       </div>
+
       <Flash ok={one(params.ok)} error={one(params.error)} />
       {prefs.places.length === 0 && (
-        <p className="flash">No places chosen, so jobs from all of Sweden are included. <Link href="/profile#places">Choose places</Link></p>
+        <p className="notice">
+          <Compass size={18} aria-hidden="true" />
+          <span>You have not chosen any places yet, so we are looking across all of Sweden. <Link href="/profile?step=2">Choose where you want to work</Link></span>
+        </p>
       )}
       {effectiveFields(profile, prefs).length === 0 && (
-        <p className="flash">No fields of work chosen, so jobs from every profession are searched. <Link href="/profile#fields">Choose your fields</Link></p>
+        <p className="notice">
+          <Compass size={18} aria-hidden="true" />
+          <span>No fields of work are chosen, so jobs from every profession are included. <Link href="/profile?step=3#fields">Choose your fields</Link></span>
+        </p>
       )}
-      <div className="tabs">
-        {VIEWS.map((v) => (
-          <Link key={v.key} href={`/?view=${v.key}&min=${minScore}`} className={v.key === view ? "tab tab-on" : "tab"}>{v.label}</Link>
-        ))}
-        <span className="spacer" />
-        {[0, 50, 70, 85].map((m) => (
-          <Link key={m} href={`/?view=${view}&min=${m}`} className={m === minScore ? "tab tab-on" : "tab"}>{m === 0 ? "Any score" : `${m}+`}</Link>
-        ))}
+
+      <div className="filters">
+        <div className="filter-group" role="group" aria-label="Which jobs">
+          {VIEWS.map((v) => (
+            <Link key={v.key} href={`/?view=${v.key}&min=${minScore}`} className="filter" aria-current={v.key === view ? "true" : undefined}>{v.label}</Link>
+          ))}
+        </div>
+        <div className="filter-group" role="group" aria-label="Minimum score">
+          {SCORES.map((s) => (
+            <Link key={s.min} href={`/?view=${view}&min=${s.min}`} className="filter" aria-current={s.min === minScore ? "true" : undefined}>{s.label}</Link>
+          ))}
+        </div>
       </div>
-      {jobs.length === 0 ? (
-        <p className="card empty">Nothing here yet. {run ? "Try a lower score filter, or wait for tomorrow's search." : "Press “Search now” to run the first search."}</p>
-      ) : (
-        jobs.map((job) => <JobCard key={job.id} job={job} />)
-      )}
+
+      <div className="searching" role="status">
+        <p className="muted">Reading new postings and grading them against your profile. This usually takes a few minutes, and you can leave the page open.</p>
+        <JobListSkeleton />
+      </div>
+
+      <div className="results">
+        {jobs.length === 0 ? (
+          <div className="empty">
+            <Inbox size={28} strokeWidth={1.5} aria-hidden="true" />
+            <h2>Nothing here right now</h2>
+            <p className="muted">
+              {run
+                ? "No jobs match this view. Try including lower scores, or check back tomorrow: we look for new postings every morning."
+                : "Press “Search now” and we will go and look. The first search takes a few minutes."}
+            </p>
+          </div>
+        ) : (
+          <div className="job-list">
+            {jobs.map((job) => <JobCard key={job.id} job={job} />)}
+          </div>
+        )}
+      </div>
     </>
   );
 }
