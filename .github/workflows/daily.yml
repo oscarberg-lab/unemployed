@@ -1,0 +1,47 @@
+name: Daily job search
+
+on:
+  schedule:
+    # 05:17 UTC, early morning in Sweden. GitHub may start it some minutes late.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-job-search
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      DIGEST_TO: ${{ secrets.DIGEST_TO }}
+      DIGEST_FROM: ${{ vars.DIGEST_FROM }}
+      APP_URL: ${{ vars.APP_URL }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+    steps:
+      - name: Check configuration
+        id: config
+        run: |
+          if [ -n "$DATABASE_URL" ] && [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping: add the DATABASE_URL and ANTHROPIC_API_KEY repository secrets to enable the daily search."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.config.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.config.outputs.ready == 'true'
+      - run: npm run daily
+        if: steps.config.outputs.ready == 'true'
