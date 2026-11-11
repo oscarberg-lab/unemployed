@@ -1,6 +1,7 @@
 import { sendDigest } from "./email";
 import { dedupe, hardFilter } from "./filters";
-import { createLlm, isConfigError, type Llm } from "./llm";
+import { isConfigError, LlmQuotaError, type Llm } from "./llm";
+import { getLlm } from "./llm-provider";
 import { SOURCES } from "./sources";
 import type { Source } from "./sources/types";
 import * as store from "./store";
@@ -12,6 +13,8 @@ export interface PipelineDeps {
   llm?: Llm;
   sendDigest?: (jobs: JobRow[]) => Promise<boolean>;
   maxScored?: number;
+  /** Stop starting new scoring calls after this long, so a web request is not cut off mid-run. */
+  timeBudgetMs?: number;
 }
 
 async function pool<T>(items: T[], size: number, worker: (item: T) => Promise<void>): Promise<void> {
@@ -63,9 +66,16 @@ export async function runPipeline(deps: PipelineDeps = {}): Promise<store.RunSta
     // Score the newest unscored jobs. Anything over the cap waits for the next run.
     const pending = await store.pendingJobs(maxScored);
     if (pending.length) {
-      const llm = deps.llm ?? createLlm();
+      const llm = deps.llm ?? getLlm();
       const ctx = { profile, prefs, feedback: await store.feedbackExamples() };
-      await pool(pending, 4, async (row) => {
+      const deadline = deps.timeBudgetMs ? Date.now() + deps.timeBudgetMs : Infinity;
+      let paused: string | null = null;
+      await pool(pending, llm.concurrency ?? 4, async (row) => {
+        if (paused) return;
+        if (Date.now() > deadline) {
+          paused = "scoring paused to stay within the time limit; the rest are scored on the next run";
+          return;
+        }
         try {
           const score = await llm.scoreJob(ctx, store.toRawJob(row));
           const reason = row.region === "INTL" && !score.strictlyRemoteFromSweden ? "not strictly remote from Sweden" : null;
@@ -75,11 +85,17 @@ export async function runPipeline(deps: PipelineDeps = {}): Promise<store.RunSta
         } catch (err) {
           // Bad credentials are not the job's fault: stop the run without using up its retries.
           if (isConfigError(err)) throw err;
+          // Out of quota: keep what was scored and leave the rest for the next run.
+          if (err instanceof LlmQuotaError) {
+            paused = `${err.message} The rest are scored on the next run`;
+            return;
+          }
           console.error(`Scoring failed for ${row.id}:`, err);
           await store.noteScoreFailure(row.id);
           stats.failed++;
         }
       });
+      if (paused) stats.sourceErrors.push(paused);
     }
 
     const digest = await store.digestJobs(prefs.digestMinScore);

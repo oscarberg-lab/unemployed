@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { CONFIG_HELP, LlmConfigError, type Llm } from "@/lib/llm";
+import { LlmConfigError, LlmQuotaError, type Llm } from "@/lib/llm";
 import { runPipeline } from "@/lib/pipeline";
 import type { Source } from "@/lib/sources/types";
 import * as store from "@/lib/store";
@@ -105,10 +105,34 @@ describe("daily pipeline", () => {
 
   it("aborts on missing credentials without using up the jobs' retries", async () => {
     const f = fakes([], grade);
-    f.deps.llm.scoreJob = async () => { throw new LlmConfigError(CONFIG_HELP); };
+    f.deps.llm.scoreJob = async () => { throw new LlmConfigError("Put a valid ANTHROPIC_API_KEY in the environment"); };
     await expect(runPipeline(f.deps)).rejects.toThrow(/ANTHROPIC_API_KEY/);
     expect(await store.pendingCount()).toBe(3);
     expect((await store.lastRun())?.error).toMatch(/ANTHROPIC_API_KEY/);
+  });
+
+  it("keeps what was scored when the free-tier quota runs out, and leaves the rest pending", async () => {
+    const f = fakes([], grade);
+    let calls = 0;
+    f.deps.llm.concurrency = 1;
+    f.deps.llm.scoreJob = async () => {
+      if (++calls > 1) throw new LlmQuotaError("Gemini free-tier limit reached for today.");
+      return score(75);
+    };
+    const stats = await runPipeline(f.deps);
+    expect(stats).toMatchObject({ scored: 1, failed: 0 });
+    expect(stats.sourceErrors.join(" | ")).toMatch(/limit reached for today/);
+    expect(calls).toBe(2); // stopped after the first refusal
+    expect(await store.pendingCount()).toBe(2);
+  });
+
+  it("stops starting new scoring calls once the time budget is spent", async () => {
+    const f = fakes([], grade);
+    const stats = await runPipeline({ ...f.deps, timeBudgetMs: -1 });
+    expect(stats.scored).toBe(0);
+    expect(f.scoredIds).toEqual([]);
+    expect(stats.sourceErrors.join(" | ")).toMatch(/time limit/);
+    expect(await store.pendingCount()).toBe(2);
   });
 
   it("aggregates gaps and tracks status changes", async () => {

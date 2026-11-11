@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
   try {
-    return Response.json(await runPipeline());
+    return Response.json(await runPipeline({ timeBudgetMs: 240_000 }));
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
