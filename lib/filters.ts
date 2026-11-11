@@ -9,7 +9,9 @@ const OPEN_TO_SWEDEN = /\b(worldwide|anywhere|global|europe|european union|eu|em
  * Cheap rules applied before any model call. Returns a reason to drop the job, or null to keep it.
  * Anything fuzzy (industry, language, salary hidden in prose) is left to the scoring step.
  */
-export function hardFilter(job: RawJob, prefs: Preferences): string | null {
+export function hardFilter(job: RawJob, prefs: Preferences, fields: string[] = []): string | null {
+  if (fields.length && job.occupationField && !fields.includes(job.occupationField)) return "different field of work";
+
   const company = normalize(job.company);
   if (prefs.avoidCompanies.some((c) => normalize(c) && company.includes(normalize(c)))) return "company excluded";
 

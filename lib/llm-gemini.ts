@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   CV_PROMPT, LETTER_SYSTEM, LlmConfigError, LlmQuotaError, ProfileSchema, ScoreSchema,
-  jobBlock, letterPrompt, scoringSystem, tidyScore, type Llm,
+  finishProfile, jobBlock, letterPrompt, scoringSystem, tidyScore, type Llm,
 } from "./llm";
 
 /**
@@ -115,7 +115,7 @@ export function createGeminiLlm(options: GeminiOptions = {}): Llm {
         file.mediaType === "application/pdf"
           ? { inlineData: { mimeType: "application/pdf", data: file.data.toString("base64") } }
           : { text: `<cv>\n${file.data.toString("utf8")}\n</cv>` };
-      return structured([cv, { text: CV_PROMPT }], null, ProfileSchema);
+      return finishProfile(await structured([cv, { text: CV_PROMPT }], null, ProfileSchema));
     },
 
     async scoreJob(ctx, job) {

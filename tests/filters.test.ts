@@ -25,6 +25,13 @@ describe("hardFilter", () => {
     expect(hardFilter(job({ lat: 65.58, lon: 22.15 }), prefs({ places: [] }))).toBeNull();
   });
 
+  it("drops Swedish jobs classified outside the chosen fields, and keeps unclassified ones", () => {
+    const preschool = job({ title: "Förskollärare", occupationField: "MVqp_eS8_kDZ" });
+    expect(hardFilter(preschool, prefs(), ["X82t_awd_Qyc"])).toBe("different field of work");
+    expect(hardFilter(preschool, prefs(), [])).toBeNull();
+    expect(hardFilter(job({ occupationField: null }), prefs(), ["X82t_awd_Qyc"])).toBeNull();
+  });
+
   it("drops excluded companies regardless of legal suffix or case", () => {
     expect(hardFilter(job({ company: "ACME Sweden AB" }), prefs({ avoidCompanies: ["acme"] }))).toBe("company excluded");
   });

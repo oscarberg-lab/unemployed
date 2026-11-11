@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { LlmConfigError, LlmQuotaError, type Llm } from "@/lib/llm";
+import { getDb } from "@/lib/db";
 import { runPipeline } from "@/lib/pipeline";
 import type { Source } from "@/lib/sources/types";
 import * as store from "@/lib/store";
@@ -14,6 +15,8 @@ const score = (n: number, over: Partial<JobScore> = {}): JobScore => ({
   gaps: ["Kubernetes"],
   workMode: "hybrid",
   strictlyRemoteFromSweden: true,
+  relevantProfession: true,
+  meetsFormalRequirements: true,
   ...over,
 });
 
@@ -142,5 +145,65 @@ describe("daily pipeline", () => {
     await store.setFeedback("jobtech:near", "up", null);
     await store.setStatus("jobtech:new2", "applied");
     expect((await store.trackedJobs()).map((j) => `${j.id}=${j.status}`).sort()).toEqual(["jobtech:near=saved", "jobtech:new2=applied"]);
+  });
+});
+
+describe("keeping irrelevant professions out", () => {
+  const ECONOMY = "X82t_awd_Qyc";
+  const batch = [
+    job({ externalId: "econ", title: "Controller", occupationField: ECONOMY }),
+    job({ externalId: "preschool", title: "Förskollärare", occupationField: "MVqp_eS8_kDZ" }),
+    job({ externalId: "doctor", title: "Läkare (unclassified feed)", occupationField: null }),
+    job({ externalId: "auditor", title: "Auktoriserad revisor", occupationField: ECONOMY }),
+  ];
+  const grade = (j: RawJob) =>
+    j.externalId === "doctor"
+      ? score(10, { relevantProfession: false })
+      : j.externalId === "auditor"
+        ? score(25, { meetsFormalRequirements: false })
+        : score(80);
+
+  it("searches only the chosen fields, drops other fields before grading, and hides what grading flags", async () => {
+    await store.savePrefs(prefs({ occupationFields: [ECONOMY] }));
+    const f = fakes(batch, grade);
+    let asked: string[] = [];
+    f.deps.sources[0].fetch = async (query) => ((asked = query.fields), batch);
+    await runPipeline(f.deps);
+
+    expect(asked).toEqual([ECONOMY]);
+    expect(f.scoredIds).not.toContain("preschool");
+    expect((await store.getJob("jobtech:preschool"))?.filtered_reason).toBe("different field of work");
+    expect((await store.getJob("jobtech:doctor"))?.filtered_reason).toBe("different profession");
+    expect((await store.getJob("jobtech:auditor"))?.filtered_reason).toBe("requires a licence or qualification you do not have");
+    const visible = (await store.listJobs("all", 0)).map((j) => j.id);
+    expect(visible).toContain("jobtech:econ");
+    expect(visible).not.toContain("jobtech:doctor");
+    expect(visible).not.toContain("jobtech:auditor");
+  });
+
+  it("uses the fields read from the CV until the user chooses their own", async () => {
+    await store.saveProfile({ ...PROFILE, occupationFields: ["apaJ_2ja_LuF"] }, "cv.pdf");
+    await store.savePrefs(prefs({ occupationFields: null }));
+    const f = fakes([], grade);
+    let asked: string[] = [];
+    f.deps.sources[0].fetch = async (query) => ((asked = query.fields), []);
+    await runPipeline(f.deps);
+    expect(asked).toEqual(["apaJ_2ja_LuF"]);
+  });
+
+  it("re-grades untouched jobs graded under older rules, but not ones the user acted on", async () => {
+    const db = await getDb();
+    await store.setStatus("jobtech:cap0", "applied");
+    await db.query("UPDATE jobs SET score = 77, score_version = 1 WHERE id IN ('jobtech:econ', 'jobtech:cap0')");
+    const f = fakes([], () => score(12, { relevantProfession: false }));
+    await runPipeline(f.deps);
+
+    expect(f.scoredIds).toContain("econ");
+    expect(f.scoredIds).not.toContain("cap0");
+    expect((await store.getJob("jobtech:econ"))?.filtered_reason).toBe("different profession");
+    expect((await store.getJob("jobtech:cap0"))?.score).toBe(77);
+    f.scoredIds.length = 0;
+    await runPipeline(f.deps);
+    expect(f.scoredIds).not.toContain("econ"); // only once
   });
 });

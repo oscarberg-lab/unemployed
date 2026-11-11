@@ -15,6 +15,8 @@ export function job(over: Partial<RawJob> = {}): RawJob {
     lat: 59.33,
     lon: 18.06,
     remote: false,
+    occupation: "Systemutvecklare",
+    occupationField: "apaJ_2ja_LuF",
     eligibleRegions: null,
     workingHours: "full_time",
     contractType: "permanent",

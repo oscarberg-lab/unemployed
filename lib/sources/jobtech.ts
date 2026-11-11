@@ -15,6 +15,8 @@ export interface JobTechHit {
   working_hours_type?: { label?: string | null } | null;
   duration?: { label?: string | null } | null;
   employment_type?: { label?: string | null } | null;
+  occupation?: { label?: string | null } | null;
+  occupation_field?: { concept_id?: string | null } | null;
   salary_description?: string | null;
   application_deadline?: string | null;
   publication_date?: string | null;
@@ -44,6 +46,8 @@ export function mapJobTechHit(hit: JobTechHit, remote: boolean): RawJob {
     lat: lat ?? null,
     lon: lon ?? null,
     remote,
+    occupation: hit.occupation?.label ?? null,
+    occupationField: hit.occupation_field?.concept_id ?? null,
     eligibleRegions: null,
     workingHours: hours === "Heltid" ? "full_time" : hours === "Deltid" ? "part_time" : null,
     contractType: duration ? (duration === "Tills vidare" ? "permanent" : "temporary") : null,
@@ -71,10 +75,13 @@ export const jobtech: Source = {
   name: "jobtech",
   label: "Arbetsförmedlingen",
   enabled: () => true,
-  async fetch({ prefs, maxAgeDays }: SourceQuery) {
+  async fetch({ prefs, fields, maxAgeDays }: SourceQuery) {
     const jobs: RawJob[] = [];
     for (const term of prefs.searchTerms) {
       const base = new URLSearchParams({ q: term, "published-after": String(maxAgeDays * 24 * 60) });
+      // The free-text search matches across professions ("analytiker" finds lab analysts too),
+      // so restrict it to the candidate's fields of work.
+      for (const field of fields) base.append("occupation-field", field);
 
       // Jobs near the chosen places (or all of Sweden when none are chosen).
       const local = new URLSearchParams(base);

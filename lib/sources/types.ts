@@ -2,6 +2,8 @@ import type { Preferences, RawJob } from "../types";
 
 export interface SourceQuery {
   prefs: Preferences;
+  /** Occupation field ids to restrict to; empty means all fields. */
+  fields: string[];
   /** Only postings published within this many days. */
   maxAgeDays: number;
 }

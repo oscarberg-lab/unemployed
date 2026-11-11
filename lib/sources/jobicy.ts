@@ -36,6 +36,8 @@ export function mapJobicy(job: JobicyJob): RawJob {
     lat: null,
     lon: null,
     remote: true,
+    occupation: null,
+    occupationField: null,
     eligibleRegions: job.jobGeo ?? null,
     workingHours: types.includes("full-time") ? "full_time" : types.includes("part-time") ? "part_time" : null,
     contractType: types.includes("contract") || types.includes("freelance") ? "temporary" : null,

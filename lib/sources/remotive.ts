@@ -29,6 +29,8 @@ export function mapRemotive(job: RemotiveJob): RawJob {
     lat: null,
     lon: null,
     remote: true,
+    occupation: null,
+    occupationField: null,
     eligibleRegions: job.candidate_required_location || null,
     workingHours: job.job_type === "full_time" ? "full_time" : job.job_type === "part_time" ? "part_time" : null,
     contractType: job.job_type === "contract" || job.job_type === "freelance" ? "temporary" : null,

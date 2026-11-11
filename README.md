@@ -9,6 +9,7 @@ Built for the Swedish job market, with optional international jobs that are stri
 
 - **Reads your CV** (PDF or text) into a profile: skills, experience, languages and seniority. Seniority is derived, never asked.
 - **Location**: add cities, each with a travel radius in km. Remote-flagged jobs elsewhere in Sweden are included if you accept remote work.
+- **Fields of work**: the Swedish search is restricted to your occupation fields (suggested from the CV, editable). Jobs in another profession, or that require a licence or qualification you lack, are hidden.
 - **Preferences**: work mode, working hours, contract type, minimum salary, industries to avoid, companies to exclude, free-text notes.
 - **Daily search** across sources, then: remove duplicates → cheap rule filters → grade the rest with an AI model (0–100, with sub-scores for skills, seniority, location and preferences, a short reason and the gaps).
 - **Feedback**: "Interested" / "Not for me" (with an optional reason) is fed into later grading.
