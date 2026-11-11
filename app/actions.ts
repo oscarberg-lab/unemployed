@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { geocodeSweden } from "@/lib/geo";
-import { createLlm } from "@/lib/llm";
+import { getLlm } from "@/lib/llm-provider";
 import { runPipeline } from "@/lib/pipeline";
 import * as store from "@/lib/store";
 import { STATUSES, type Preferences, type Status, type WorkMode } from "@/lib/types";
@@ -27,7 +27,7 @@ export async function uploadCv(form: FormData) {
 
   let error: string | null = null;
   try {
-    const profile = await createLlm().parseCv({
+    const profile = await getLlm().parseCv({
       filename: cv.name,
       mediaType: isPdf ? "application/pdf" : "text/plain",
       data: Buffer.from(await cv.arrayBuffer()),
@@ -101,8 +101,8 @@ export async function removePlace(form: FormData) {
 export async function runNow() {
   let result: { key: "ok" | "error"; text: string };
   try {
-    const s = await runPipeline();
-    const problems = s.sourceErrors.length ? ` Problems: ${s.sourceErrors.join("; ")}.` : "";
+    const s = await runPipeline({ timeBudgetMs: 240_000 });
+    const problems = s.sourceErrors.length ? ` Note: ${s.sourceErrors.join("; ")}.` : "";
     result = {
       key: "ok",
       text: `Found ${s.new} new postings, scored ${s.scored}${s.failed ? `, ${s.failed} failed to score` : ""}.${problems}`,
@@ -141,7 +141,7 @@ export async function writeCoverLetter(form: FormData) {
   try {
     const [job, { profile }] = await Promise.all([store.getJob(id), store.getSettings()]);
     if (!job || !profile) throw new Error("Job or profile missing.");
-    const letter = await createLlm().coverLetter(profile, store.toRawJob(job), String(form.get("extra") ?? "").trim());
+    const letter = await getLlm().coverLetter(profile, store.toRawJob(job), String(form.get("extra") ?? "").trim());
     await store.setCoverLetter(id, letter);
   } catch (err) {
     error = message(err);

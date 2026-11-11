@@ -8,7 +8,7 @@ Personal, single-user job-search tool for the Swedish market. See README.md for 
 
 - `lib/sources/` — one adapter per job site, all returning `RawJob[]`. Register new ones in `lib/sources/index.ts`.
 - `lib/filters.ts` — rule-based filters that run before any model call. Fuzzy judgements belong in scoring, not here.
-- `lib/llm.ts` — every Claude call (CV parsing, job scoring, cover letters) behind the `Llm` interface so tests can fake it.
+- `lib/llm.ts` — the `Llm` interface, shared prompts and schemas, and the Claude implementation. `lib/llm-gemini.ts` is the free-tier Gemini implementation; `lib/llm-provider.ts` picks one from the environment. Prompts and schemas are shared, so change them in one place.
 - `lib/pipeline.ts` — the daily run: fetch → dedupe → filter → score → email. Entry points: `scripts/daily.ts`, `app/api/cron`, the "Search now" button.
 - `lib/store.ts` — all SQL. `lib/db.ts` picks Postgres (`DATABASE_URL`) or embedded PGlite (`./.data`).
 - `app/` — Next.js App Router pages; mutations are server actions in `app/actions.ts`.

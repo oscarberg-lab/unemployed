@@ -21,12 +21,16 @@ export interface ScoringContext {
 }
 
 export interface Llm {
+  /** Shown in the UI so it is clear where the CV is sent. */
+  provider?: string;
+  /** How many jobs may be scored at once (free tiers allow very few requests per minute). */
+  concurrency?: number;
   parseCv(file: CvFile): Promise<Profile>;
   scoreJob(ctx: ScoringContext, job: RawJob): Promise<JobScore>;
   coverLetter(profile: Profile, job: RawJob, extra: string): Promise<string>;
 }
 
-const ProfileSchema = z.object({
+export const ProfileSchema = z.object({
   name: z.string(),
   headline: z.string().describe("One line, e.g. 'Backend developer, 4 years, fintech'"),
   seniority: z.enum(["student", "junior", "mid", "senior", "lead", "executive"]),
@@ -41,7 +45,7 @@ const ProfileSchema = z.object({
   summary: z.string().describe("3-5 sentences covering strengths, domain experience and what roles fit"),
 });
 
-const ScoreSchema = z.object({
+export const ScoreSchema = z.object({
   score: z.number().describe("Overall fit, integer 0-100"),
   subscores: z.object({
     skills: z.number().describe("0-100"),
@@ -81,7 +85,7 @@ Rules:
 - The candidate's past feedback shows their taste. Weigh it, especially the notes.
 - Postings may be in Swedish or English. Always answer in English.`;
 
-function scoringSystem(ctx: ScoringContext): string {
+export function scoringSystem(ctx: ScoringContext): string {
   const { profile, prefs, feedback } = ctx;
   const liked = feedback.filter((f) => f.feedback === "up");
   const disliked = feedback.filter((f) => f.feedback === "down");
@@ -103,7 +107,7 @@ Jobs they marked as not interesting:\n${disliked.map(line).join("\n") || "- none
   ].join("\n\n");
 }
 
-function jobBlock(job: RawJob): string {
+export function jobBlock(job: RawJob): string {
   return `Title: ${job.title}
 Employer: ${job.company}
 Location: ${job.location}${job.eligibleRegions ? `\nOpen to candidates in: ${job.eligibleRegions}` : ""}
@@ -118,7 +122,12 @@ ${job.description}`;
 /** Missing or rejected credentials: retrying job by job is pointless, the whole run should stop. */
 export class LlmConfigError extends Error {}
 
+/** The provider's usage limit is used up for now. Remaining jobs should wait for the next run. */
+export class LlmQuotaError extends Error {}
+
 export const isConfigError = (err: unknown) => err instanceof LlmConfigError;
+
+const CONFIG_HELP = "Claude API access is not set up. Put a valid ANTHROPIC_API_KEY in the environment and try again.";
 
 function asConfigError(err: unknown): unknown {
   const rejected = err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError;
@@ -130,15 +139,40 @@ function asConfigError(err: unknown): unknown {
 function guarded(llm: Llm): Llm {
   const wrap = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => (...args: A) =>
     fn(...args).catch((err) => { throw asConfigError(err); });
-  return { parseCv: wrap(llm.parseCv), scoreJob: wrap(llm.scoreJob), coverLetter: wrap(llm.coverLetter) };
+  return { ...llm, parseCv: wrap(llm.parseCv), scoreJob: wrap(llm.scoreJob), coverLetter: wrap(llm.coverLetter) };
 }
 
-export const CONFIG_HELP = "Claude API access is not set up. Put a valid ANTHROPIC_API_KEY in .env.local (or your host's environment) and try again.";
+export const CV_PROMPT =
+  "This is my CV. Extract my profile for a job-matching tool that searches the Swedish job market. Only include what the CV supports; judge seniority from the roles and years, not from job titles alone.";
+
+export const LETTER_SYSTEM =
+  "You write cover letters for a job seeker. Write in the language of the job posting. Keep it under 300 words, specific to this employer and role, grounded only in facts from the candidate profile, never inventing experience. No placeholders and no flattery clichés. Output only the letter text.";
+
+export const letterPrompt = (profile: Profile, job: RawJob, extra: string) =>
+  `## My profile\n${JSON.stringify(profile, null, 2)}\n\n## The posting\n${jobBlock(job)}${extra ? `\n\n## What I want the letter to emphasise\n${extra}` : ""}`;
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
-export function createLlm(client: Anthropic = new Anthropic()): Llm {
+/** Clamp and tidy whatever the model returned. */
+export function tidyScore(out: z.infer<typeof ScoreSchema>): JobScore {
+  return {
+    ...out,
+    score: clamp(out.score),
+    subscores: {
+      skills: clamp(out.subscores.skills),
+      seniority: clamp(out.subscores.seniority),
+      location: clamp(out.subscores.location),
+      preferences: clamp(out.subscores.preferences),
+    },
+    strengths: [...new Set(out.strengths)].slice(0, 4),
+    gaps: [...new Set(out.gaps.map((g) => g.trim()).filter(Boolean))].slice(0, 5),
+  };
+}
+
+export function createAnthropicLlm(client: Anthropic = new Anthropic()): Llm {
   return guarded({
+    provider: "Claude (Anthropic)",
+    concurrency: 4,
     async parseCv(file) {
       const isPdf = file.mediaType === "application/pdf";
       const cv: Anthropic.Beta.BetaContentBlockParam = isPdf
@@ -156,7 +190,7 @@ export function createLlm(client: Anthropic = new Anthropic()): Llm {
               cv,
               {
                 type: "text",
-                text: "This is my CV. Extract my profile for a job-matching tool that searches the Swedish job market. Only include what the CV supports; judge seniority from the roles and years, not from job titles alone.",
+                text: CV_PROMPT,
               },
             ],
           },
@@ -178,18 +212,7 @@ export function createLlm(client: Anthropic = new Anthropic()): Llm {
       });
       const out = res.parsed_output;
       if (!out) throw new Error(`No score returned (stop reason: ${res.stop_reason})`);
-      return {
-        ...out,
-        score: clamp(out.score),
-        subscores: {
-          skills: clamp(out.subscores.skills),
-          seniority: clamp(out.subscores.seniority),
-          location: clamp(out.subscores.location),
-          preferences: clamp(out.subscores.preferences),
-        },
-        strengths: [...new Set(out.strengths)].slice(0, 4),
-        gaps: [...new Set(out.gaps.map((g) => g.trim()).filter(Boolean))].slice(0, 5),
-      };
+      return tidyScore(out);
     },
 
     async coverLetter(profile, job, extra) {
@@ -198,14 +221,8 @@ export function createLlm(client: Anthropic = new Anthropic()): Llm {
         max_tokens: 8000,
         ...FALLBACK,
         output_config: { effort: "medium" },
-        system:
-          "You write cover letters for a job seeker. Write in the language of the job posting. Keep it under 300 words, specific to this employer and role, grounded only in facts from the candidate profile, never inventing experience. No placeholders and no flattery clichés. Output only the letter text.",
-        messages: [
-          {
-            role: "user",
-            content: `## My profile\n${JSON.stringify(profile, null, 2)}\n\n## The posting\n${jobBlock(job)}${extra ? `\n\n## What I want the letter to emphasise\n${extra}` : ""}`,
-          },
-        ],
+        system: LETTER_SYSTEM,
+        messages: [{ role: "user", content: letterPrompt(profile, job, extra) }],
       });
       if (res.stop_reason === "refusal") throw new Error("The model declined to write this letter.");
       const text = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim();

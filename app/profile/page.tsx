@@ -1,6 +1,7 @@
 import { addPlace, removePlace, savePreferences, uploadCv } from "@/app/actions";
 import { Flash, one, type Search } from "@/components/Flash";
 import { SubmitButton } from "@/components/SubmitButton";
+import { providerLabel } from "@/lib/llm-provider";
 import { getSettings } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
           <input type="file" name="cv" accept=".pdf,.txt,.md,application/pdf,text/plain" required />
           <SubmitButton className="btn btn-primary" pendingText="Reading your CV…">{profile ? "Replace CV" : "Upload CV"}</SubmitButton>
         </form>
-        <p className="meta">PDF or plain text. The file is sent to Claude to extract your profile; only the extracted profile is stored.</p>
+        <p className="meta">PDF or plain text. The file is sent to {providerLabel()} to extract your profile; only the extracted profile is stored here.</p>
         {profile && (
           <div className="profile">
             <p><strong>{profile.name}</strong> — {profile.headline} <span className="meta">(from {cvFilename})</span></p>
